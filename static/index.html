@@ -1,0 +1,402 @@
+
+<!DOCTYPE html>
+<html>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<head>
+    <title>AI Invoice Automation</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f6f9;
+            padding: 25px;
+            color: #222;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: auto;
+        }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+        }
+
+        .card, .panel {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .card h2 {
+            color: #2563eb;
+        }
+
+        input, button, select {
+            padding: 10px;
+            margin: 7px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        button {
+            background: #2563eb;
+            color: white;
+            cursor: pointer;
+            border: none;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+
+        th, td {
+            padding: 12px;
+            border-bottom: 1px solid #ddd;
+            text-align: left;
+        }
+
+        #review {
+            display: none;
+        }
+
+        .field {
+            display: block;
+            width: 95%;
+        }
+
+        @media(max-width: 700px) {
+            .cards {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>AI Invoice Automation</h1>
+    <p>Invoice Management Dashboard</p>
+
+    <div class="cards">
+
+        <div class="card">
+            <p>Total Invoices</p>
+            <h2 id="count">0</h2>
+        </div>
+
+        <div class="card">
+            <p>Total Expenses</p>
+            <h2 id="expenses">0</h2>
+        </div>
+
+        <div class="card">
+            <p>Approved</p>
+            <h2 id="approved">0</h2>
+        </div>
+
+        <div class="card">
+            <p>Pending</p>
+            <h2 id="pending">0</h2>
+        </div>
+
+    </div>
+
+    <div class="panel">
+
+        <h2>Upload Invoice</h2>
+
+        <input type="file" id="invoiceFile"
+               accept="image/png,image/jpeg,application/pdf">
+
+        <br>
+
+        <button onclick="uploadInvoice()">Extract Invoice</button>
+
+    </div>
+
+    <div class="panel" id="review">
+
+        <h2>Review Invoice</h2>
+
+        <p id="extractionMethod"
+        style="font-weight: bold; color: #2563eb;">
+        </p>
+
+        <label>Vendor</label>
+        <input class="field" id="vendor">
+
+        <label>Invoice Number</label>
+        <input class="field" id="invoice_number">
+
+        <label>Date</label>
+        <input class="field" id="date">
+
+        <label>Due Date</label>
+        <input class="field" id="due_date">
+
+        <label>Subtotal</label>
+        <input class="field" id="subtotal" type="number" step="0.01">
+
+        <label>Tax</label>
+        <input class="field" id="tax" type="number" step="0.01">
+
+        <label>Total</label>
+        <input class="field" id="total" type="number" step="0.01">
+
+        <button onclick="approveInvoice()">Approve & Save</button>
+
+    </div>
+
+    <p id="message"></p>
+
+    <div class="panel">
+        <h2>Monthly Expense Analytics</h2>
+
+        <div style="width: 100%; max-width: 700px;">
+            <canvas id="expenseChart"></canvas>
+        </div>
+        <h2>Invoice History</h2>
+
+        <input id="keyword" placeholder="Search vendor or invoice number">
+
+        <button onclick="searchInvoices()">Search</button>
+
+        <select id="status">
+            <option value="">All Status</option>
+            <option value="Approved">Approved</option>
+            <option value="Pending">Pending</option>
+        </select>
+
+        <button onclick="filterInvoices()">Filter</button>
+        <button onclick="loadInvoices()">Show All</button>
+        <button onclick="exportInvoices()">Export CSV</button>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Vendor</th>
+                    <th>Invoice No.</th>
+                    <th>Date</th>
+                    <th>Amount</th>
+                    <th>Tax</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+
+            <tbody id="invoiceTable"></tbody>
+        </table>
+
+    </div>
+
+</div>
+
+<script>
+
+let extractedInvoice = null;
+
+async function loadDashboard() {
+
+    const response = await fetch("/dashboard");
+    const data = await response.json();
+
+    document.getElementById("count").innerText =
+        data.total_invoices;
+
+    document.getElementById("expenses").innerText =
+        data.total_expenses;
+
+    document.getElementById("approved").innerText =
+        data.approved_invoices;
+
+    document.getElementById("pending").innerText =
+        data.pending_invoices;
+}
+
+async function uploadInvoice() {
+
+    const file = document.getElementById("invoiceFile").files[0];
+
+    if (!file) {
+        alert("Please select an invoice image");
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await fetch("/upload-invoice", {
+        method: "POST",
+        body: formData
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        document.getElementById("message").innerText =
+            data.detail || "Upload failed";
+        return;
+    }
+
+    extractedInvoice = data.invoice_data;
+
+    const method = extractedInvoice.extraction_method || "Unknown";
+
+    document.getElementById("extractionMethod").innerText ="Extraction Method: " + method;
+
+    for (const key in extractedInvoice) {
+        const field = document.getElementById(key);
+        if (field) {
+            field.value = extractedInvoice[key] ?? "";
+        }
+    }
+
+    document.getElementById("review").style.display = "block";
+
+    document.getElementById("message").innerText =
+        "Invoice extracted. Please review the details.";
+}
+
+async function approveInvoice() {
+
+    const params = new URLSearchParams({
+        vendor: document.getElementById("vendor").value,
+        invoice_number: document.getElementById("invoice_number").value,
+        date: document.getElementById("date").value,
+        due_date: document.getElementById("due_date").value,
+        subtotal: document.getElementById("subtotal").value,
+        tax: document.getElementById("tax").value,
+        total: document.getElementById("total").value
+    });
+
+    const response = await fetch(
+        "/approve-extracted-invoice?" + params.toString(),
+        { method: "POST" }
+    );
+
+    const data = await response.json();
+
+    document.getElementById("message").innerText =
+        response.ok ? data.message : (data.detail || "Approval failed");
+
+    if (response.ok) {
+        document.getElementById("review").style.display = "none";
+        document.getElementById("invoiceFile").value = "";
+        await loadDashboard();
+        await loadInvoices();
+    }
+}
+
+async function loadInvoices() {
+
+    const response = await fetch("/invoices");
+    const invoices = await response.json();
+
+    displayInvoices(invoices);
+}
+
+function displayInvoices(invoices) {
+
+    const table = document.getElementById("invoiceTable");
+    table.innerHTML = "";
+
+    invoices.forEach(invoice => {
+
+        const row = document.createElement("tr");
+
+        [
+            invoice.id,
+            invoice.vendor,
+            invoice.invoice_number,
+            invoice.date,
+            invoice.amount,
+            invoice.tax,
+            invoice.status
+        ].forEach(value => {
+            const cell = document.createElement("td");
+            cell.textContent = value ?? "";
+            row.appendChild(cell);
+        });
+
+        table.appendChild(row);
+    });
+}
+
+async function searchInvoices() {
+
+    const keyword = document.getElementById("keyword").value;
+
+    if (!keyword.trim()) {
+        loadInvoices();
+        return;
+    }
+
+    const response = await fetch(
+        "/search-invoices?keyword=" + encodeURIComponent(keyword)
+    );
+
+    const data = await response.json();
+    displayInvoices(data);
+}
+
+async function filterInvoices() {
+
+    const status = document.getElementById("status").value;
+
+    if (!status) {
+        loadInvoices();
+        return;
+    }
+
+    const response = await fetch(
+        "/filter-invoices?status=" + encodeURIComponent(status)
+    );
+
+    const data = await response.json();
+    displayInvoices(data);
+}
+function exportInvoices() {
+    window.location.href = "/export-invoices";
+}
+async function loadExpenseChart() {
+    const response = await fetch("/monthly-expenses");
+    const data = await response.json();
+
+    const labels = data.map(item => item.month);
+    const values = data.map(item => item.total_expenses);
+
+    new Chart(document.getElementById("expenseChart"), {
+        type: "bar",
+        data: {
+            labels: labels,
+            datasets: [{
+                label: "Monthly Expenses",
+                data: values
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+loadDashboard();
+loadExpenseChart();
+loadInvoices();
+
+</script>
+
+</body>
+</html>
