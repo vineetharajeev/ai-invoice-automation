@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+python-multipart
+pillow
+pytesseract
+pymupdf
+python-dotenv
+google-genai
